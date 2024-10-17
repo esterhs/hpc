@@ -4,6 +4,7 @@
 #include <math.h>
 #include <string.h>
 #include <threads.h>
+#include <stdint.h>
 
 typedef struct {
   int val;
@@ -11,8 +12,8 @@ typedef struct {
 } int_padded;
 
 typedef struct {
-  const float **v;
-  float **w;
+  uint8_t ** attractors;
+  uint8_t ** convergences;
   int ib;
   int istep;
   int sz;
@@ -23,8 +24,8 @@ typedef struct {
 } thrd_info_t;
 
 typedef struct {
-  const float **v;
-  float **w;
+  uint8_t ** attractors;
+  uint8_t ** convergences;
   int sz;
   int nthrds;
   mtx_t *mtx;
@@ -34,6 +35,9 @@ typedef struct {
 
 // GLOBAL DECLERATION
 int nthrds, sz, d;
+//uint8_t ** attractors;
+//uint8_t ** convergences;
+
 
 int
 main_thrd(
@@ -41,8 +45,8 @@ main_thrd(
     )
 {
   const thrd_info_t *thrd_info = (thrd_info_t*) args;
-  const float **v = thrd_info->v;
-  float **w = thrd_info->w;
+  uint8_t ** attractors = thrd_info->attractors;
+  uint8_t ** convergences = thrd_info->convergences;
   const int ib = thrd_info->ib;
   const int istep = thrd_info->istep;
   const int sz = thrd_info->sz;
@@ -53,14 +57,16 @@ main_thrd(
 
 
   for ( int ix = ib; ix < sz; ix += istep ) {
-    const float *vix = v[ix];
-    float *wix = (float*) malloc(sz*sizeof(float));
+    uint8_t * convergence = (uint8_t*) malloc(sz*sizeof(uint8_t));
+    uint8_t * attractor = (uint8_t*) malloc(sz*sizeof(uint8_t));
 
-    for ( int jx = 0; jx < sz; ++jx )
-      wix[jx] = ix;
-
+    for ( int jx = 0; jx < sz; ++jx ) {
+      attractor[jx] = ix;
+      convergence[jx] = ix;
+    }
     mtx_lock(mtx);
-    w[ix] = wix;
+    attractors[ix] = attractor;
+    convergences[ix] = convergence;
     status[tx].val = ix + istep;
     mtx_unlock(mtx);
     cnd_signal(cnd);
@@ -76,8 +82,8 @@ main_thrd_check(
     )
 {
   const thrd_info_check_t *thrd_info = (thrd_info_check_t*) args;
-  const float **v = thrd_info->v;
-  float **w = thrd_info->w;
+  uint8_t ** attractors = thrd_info->attractors;
+  uint8_t **convergences = thrd_info->convergences;
   const int sz = thrd_info->sz;
   const int nthrds = thrd_info->nthrds;
   mtx_t *mtx = thrd_info->mtx;
@@ -103,20 +109,16 @@ main_thrd_check(
 
     // Det är här vi vill skriva till vår fil sen
     for ( ; ix < ibnd; ++ix ) {
-      //printf("\n");
       for ( int jx = 0; jx < sz; ++jx )
-        printf("%f ", w[ix][jx]);
-      free(w[ix]);
+        printf("%u ", attractors[ix][jx]);
+      free(attractors[ix]);
+      free(convergences[ix]);
       printf("\n");
     }
   }
 
   return 0;
 }
-      
-
-
-
 
 
   int 
@@ -125,6 +127,7 @@ main(
     char *argv[]
     )
 {
+  // default values
   nthrds = 1;
   sz = 1;
   d = 1;
@@ -153,8 +156,9 @@ main(
   }
 
 
-  float **v = (float**) malloc(sz*sizeof(float*));
-  float **w = (float**) malloc(sz*sizeof(float*));
+  uint8_t ** attractors = (uint8_t**) malloc(sz*sizeof(uint8_t*));
+  uint8_t ** convergences = (uint8_t**) malloc(sz*sizeof(uint8_t*));
+  /*
   float *ventries = (float*) malloc(sz*sz*sizeof(float));
 
   for ( int ix = 0, jx = 0; ix < sz; ++ix, jx += sz )
@@ -162,7 +166,7 @@ main(
 
   for ( int ix = 0; ix < sz*sz; ++ix )
     ventries[ix] = ix;
-
+*/
   thrd_t thrds[nthrds];
   thrd_info_t thrds_info[nthrds];
 
@@ -179,8 +183,8 @@ main(
 
   // Här gör vi threads
   for ( int tx = 0; tx < nthrds; ++tx ) {
-    thrds_info[tx].v = (const float**) v;
-    thrds_info[tx].w = w;
+    thrds_info[tx].attractors = attractors;
+    thrds_info[tx].convergences = convergences;
     thrds_info[tx].ib = tx;
     thrds_info[tx].istep = nthrds;
     thrds_info[tx].sz = sz;
@@ -199,8 +203,8 @@ main(
   }
 
   {
-    thrd_info_check.v = (const float**) v;
-    thrd_info_check.w = w;
+    thrd_info_check.attractors = attractors;
+    thrd_info_check.convergences = convergences;
     thrd_info_check.sz = sz;
     thrd_info_check.nthrds = nthrds;
     thrd_info_check.mtx = &mtx;
@@ -220,16 +224,12 @@ main(
     thrd_join(thrd_check, &r);
   }
 
-  free(ventries);
-  free(v);
-  free(w);
+  //free(ventries);
+  free(convergences);
+  free(attractors);
 
   mtx_destroy(&mtx);
   cnd_destroy(&cnd);
 
-
-    //  printf("t: %i\n", n_thrds);
-//  printf("l: %i\n", n_rows);
-//  printf("d: %i\n", d);
   return 0;
 }
