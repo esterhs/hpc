@@ -38,7 +38,7 @@ typedef struct {
 int nthrds, size, d;
 uint8_t ** attractors;
 uint8_t ** convergences;
-char * colors[] = {"128 0 32\n", "34 85 50\n", "40 65 135\n", "204 153 0\n", "54 117 136\n", "75 0 130\n", "204 85 0\n", "255 255 255\n"};
+char * colors[] = {"128 000 032\n", "034 085 050\n", "040 065 135\n", "204 153 000\n", "054 117 136\n", "075 000 130\n", "204 085 000\n", "255 255 255\n"};
 double * roots_re;
 double * roots_im;
 
@@ -70,23 +70,25 @@ main_thrd(
       double re = -2 + (double) jx * 4 / (double) size;
       double complex x = re + im * I;
       for ( conv = 0, attr = 8; ; ++conv ) {
-        if ( conv > 50 ) {
+        double x_re = creal(x);
+        double x_im = cimag(x);
+        if ( conv == 50 ) {
           attr = 7;
           break;
         } 
-        if ( creal(x) > 10e5 || creal(x) < -10e5 || cimag(x) > 10e5 || cimag(x) < -10e5 ) { //upper bound
+        if ( x_re > 1e10 || x_re < -1e10 || x_im > 1e10 || x_im < -1e10 ) { //upper bound
           attr = 7;
           break;
         }
-        if ( creal(x) * creal(x) + cimag(x) *cimag(x) < 10e-6) { //lower bound
+        if ( x_re * x_re + x_im * x_im < 1e-6) { //lower bound
           attr = 7;
           break;
         }
         for ( int kx = 0; kx < d; ++kx ) {
-          double diff_re = ( creal(x) - roots_re[kx]) * ( creal(x) - roots_re[kx]);
-          double diff_im = ( cimag(x) - roots_im[kx]) * ( cimag(x) - roots_im[kx]);
+          double diff_re = ( x_re - roots_re[kx]) * ( x_re - roots_re[kx]);
+          double diff_im = ( x_im - roots_im[kx]) * ( x_im - roots_im[kx]);
           double dist = diff_re + diff_im;
-          if ( dist < 10e-6 ) {
+          if ( dist < 1e-6 ) {
             attr = kx;
             break;
           }
@@ -169,10 +171,16 @@ main_thrd_check(
     return -1; 
   }
   fprintf(fp_att, "P3\n%d %d\n255\n", size, size);
-  fprintf(fp_conv, "P3\n%d %d\n50\n", size, size);
+  fprintf(fp_conv, "P3\n%d %d\n51\n", size, size);
+
+  char * grey_colors[51];
+  for ( int i = 0; i < 51; ++i ) {
+    grey_colors[i] = malloc(12 * sizeof(char));
+    sprintf(grey_colors[i], "%d %d %d\n", i, i, i);
+  }
  
   for ( int ix = 0, ibnd; ix < size; ) {
-    for ( mtx_lock(mtx); ; ) {
+      for ( mtx_lock(mtx); ; ) {
       ibnd = size;
       for ( int tx = 0; tx < nthrds; ++tx )
         if ( ibnd > status[tx].val )
@@ -186,23 +194,24 @@ main_thrd_check(
       }
     }
 
-    fprintf(stderr, "checking until %i\n", ibnd);
+    //fprintf(stderr, "checking until %i\n", ibnd);
 
     // Det är här vi vill skriva till vår fil sen
     for ( ; ix < ibnd; ++ix ) {
       for ( int jx = 0; jx < size; ++jx ) {
-        //printf("%u\n", attractors[ix][jx]);
-        fwrite(colors[attractors[ix][jx]], sizeof(char), strlen(colors[attractors[ix][jx]]), fp_att);
-        char grey_color[50];
-        sprintf(grey_color, "%d %d %d\n", convergences[ix][jx], convergences[ix][jx], convergences[ix][jx]);
-        fwrite(grey_color, sizeof(char), strlen(grey_color), fp_conv);
-
+       // printf("%u\n", convergences[ix][jx]);
+        fwrite(colors[attractors[ix][jx]], sizeof(char), 12, fp_att);
+        //sprintf(grey_color, "%d %d %d\n", convergences[ix][jx], convergences[ix][jx], convergences[ix][jx]);
+        fwrite(grey_colors[convergences[ix][jx]], sizeof(char), strlen(grey_colors[convergences[ix][jx]]), fp_conv);
       }
       free(attractors[ix]);
       free(convergences[ix]);
-      printf("\n");
     }
   }
+  for (int i = 0; i < 51; ++i) {
+   free(grey_colors[i]);
+  } 
+  
   fclose(fp_att);
   fclose(fp_conv);
   return 0;
